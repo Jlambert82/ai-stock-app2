@@ -16,23 +16,34 @@ st.subheader("Short-Term (Max 1 Week Hold)")
 def get_stock_data(ticker):
     df = yf.download(ticker, period="6mo", interval="1d")
 
-    # 🚨 Handle invalid ticker
+    # 🚨 Invalid ticker check
     if df.empty:
         return None
 
-    # 🚨 Fix dataframe shape issues
-    df = df[['Close', 'Volume']].copy()
-    df['Close'] = df['Close'].squeeze()
+    # 🚨 HARD FIX: Flatten data properly
+    df = df.reset_index()
+
+    close = df["Close"]
+    volume = df["Volume"]
+
+    # Convert to 1D (THIS is the key fix)
+    close = pd.Series(close.values.flatten())
+    volume = pd.Series(volume.values.flatten())
+
+    df_clean = pd.DataFrame({
+        "Close": close,
+        "Volume": volume
+    })
 
     # Indicators
-    df['rsi'] = RSIIndicator(close=df['Close']).rsi()
-    macd = MACD(close=df['Close'])
-    df['macd'] = macd.macd()
+    df_clean['rsi'] = RSIIndicator(close=df_clean['Close']).rsi()
+    macd = MACD(close=df_clean['Close'])
+    df_clean['macd'] = macd.macd()
 
-    # Target (next day up or down)
-    df['target'] = (df['Close'].shift(-1) > df['Close']).astype(int)
+    # Target
+    df_clean['target'] = (df_clean['Close'].shift(-1) > df_clean['Close']).astype(int)
 
-    return df.dropna()
+    return df_clean.dropna()
 
 # -----------------------------
 # Train Model
