@@ -5,12 +5,22 @@ from ta.momentum import RSIIndicator
 from ta.trend import MACD
 from sklearn.ensemble import RandomForestClassifier
 
-st.title("📈 AI Stock Predictor (1 Week Max Hold)")
+st.set_page_config(page_title="AI Stock Predictor", layout="centered")
 
+st.title("📈 AI Stock Predictor")
+st.subheader("Short-Term (Max 1 Week Hold)")
+
+# -----------------------------
+# Get Stock Data
+# -----------------------------
 def get_stock_data(ticker):
     df = yf.download(ticker, period="6mo", interval="1d")
 
-    # 🛑 FIX: Ensure Close is 1D
+    # 🚨 Handle invalid ticker
+    if df.empty:
+        return None
+
+    # 🚨 Fix dataframe shape issues
     df = df[['Close', 'Volume']].copy()
     df['Close'] = df['Close'].squeeze()
 
@@ -19,42 +29,73 @@ def get_stock_data(ticker):
     macd = MACD(close=df['Close'])
     df['macd'] = macd.macd()
 
-    # Target
+    # Target (next day up or down)
     df['target'] = (df['Close'].shift(-1) > df['Close']).astype(int)
 
     return df.dropna()
 
+# -----------------------------
+# Train Model
+# -----------------------------
 def train_model(df):
     X = df[['Close', 'Volume', 'rsi', 'macd']]
     y = df['target']
 
-    model = RandomForestClassifier()
+    model = RandomForestClassifier(n_estimators=100)
     model.fit(X, y)
 
     return model
 
+# -----------------------------
+# Predict
+# -----------------------------
 def predict(model, df):
     latest = df[['Close', 'Volume', 'rsi', 'macd']].iloc[-1:]
     prob = model.predict_proba(latest)[0][1]
     return prob
 
-def strategy(price):
+# -----------------------------
+# Strategy
+# -----------------------------
+def get_strategy(price):
     return {
-        "Sell (Take Profit)": round(price * 1.05, 2),
-        "Stop Loss": round(price * 0.98, 2),
+        "Take Profit (+5%)": round(price * 1.05, 2),
+        "Stop Loss (-2%)": round(price * 0.98, 2),
         "Max Hold Days": 5
     }
 
+# -----------------------------
+# UI Input
+# -----------------------------
 ticker = st.text_input("Enter Stock Ticker", "AAPL")
 
+# -----------------------------
+# Run Analysis
+# -----------------------------
 if st.button("Analyze"):
-    df = get_stock_data(ticker)
-    model = train_model(df)
 
-    prob = predict(model, df)
-    price = df['Close'].iloc[-1]
+    with st.spinner("Analyzing stock..."):
+        df = get_stock_data(ticker)
 
-    st.subheader(f"{ticker} Results")
-    st.write(f"💰 Price: ${price:.2f}")
-    st.write(f"📊 Chance of Going Up: {prob:.2%}")
-    st.write(strategy(price))
+        if df is None:
+            st.error("❌ Invalid ticker or no data found.")
+        else:
+            model = train_model(df)
+            prob = predict(model, df)
+            price = df['Close'].iloc[-1]
+            strategy = get_strategy(price)
+
+            st.success(f"✅ Analysis for {ticker.upper()}")
+
+            # Display results
+            st.metric("💰 Current Price", f"${price:.2f}")
+            st.metric("📊 Chance of Going Up", f"{prob:.2%}")
+
+            st.subheader("📌 Trading Strategy")
+            st.write(f"🎯 Take Profit: ${strategy['Take Profit (+5%)']}")
+            st.write(f"🛑 Stop Loss: ${strategy['Stop Loss (-2%)']}")
+            st.write(f"⏳ Max Hold: {strategy['Max Hold Days']} days")
+
+            # Optional chart
+            st.subheader("📉 Price Chart")
+            st.line_chart(df['Close'])
