@@ -10,10 +10,16 @@ st.title("📈 AI Stock Predictor (1 Week Max Hold)")
 def get_stock_data(ticker):
     df = yf.download(ticker, period="6mo", interval="1d")
 
-    df['rsi'] = RSIIndicator(df['Close']).rsi()
-    macd = MACD(df['Close'])
+    # 🛑 FIX: Ensure Close is 1D
+    df = df[['Close', 'Volume']].copy()
+    df['Close'] = df['Close'].squeeze()
+
+    # Indicators
+    df['rsi'] = RSIIndicator(close=df['Close']).rsi()
+    macd = MACD(close=df['Close'])
     df['macd'] = macd.macd()
 
+    # Target
     df['target'] = (df['Close'].shift(-1) > df['Close']).astype(int)
 
     return df.dropna()
