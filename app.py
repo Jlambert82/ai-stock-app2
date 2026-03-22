@@ -8,16 +8,25 @@ from sklearn.ensemble import RandomForestClassifier
 st.set_page_config(page_title="AI Stock Scanner", layout="wide")
 
 st.title("🚀 AI Stock Scanner")
-st.subheader("Find Top Short-Term Trades (Max 1 Week Hold)")
+st.subheader("Top Short-Term Opportunities (Max 1 Week Hold)")
 
 # -----------------------------
-# STOCK LIST (you can expand this)
+# STOCK LIST
 # -----------------------------
 stocks = [
     "AAPL", "MSFT", "TSLA", "NVDA", "AMZN",
-    "META", "GOOGL", "AMD", "NFLX", "INTC",
-    "SPY", "QQQ", "COIN", "PLTR", "BA"
+    "META", "GOOGL", "AMD", "NFLX", "INTC"
 ]
+
+# -----------------------------
+# GET COMPANY NAME
+# -----------------------------
+def get_company_name(ticker):
+    try:
+        info = yf.Ticker(ticker).info
+        return info.get("longName", ticker)
+    except:
+        return ticker
 
 # -----------------------------
 # DATA FUNCTION (FIXED)
@@ -77,95 +86,41 @@ def get_strategy(price):
     }
 
 # -----------------------------
-# SCAN BUTTON
+# SCAN
 # -----------------------------
 if st.button("🔍 Scan Market"):
 
-    results = []
-
-    progress = st.progress(0)
+    cols = st.columns(3)  # 3 cards per row
 
     for i, ticker in enumerate(stocks):
         try:
             df = get_stock_data(ticker)
-
             if df is None:
                 continue
 
             model = train_model(df)
             prob = predict(model, df)
             price = df['Close'].iloc[-1]
-
             strategy = get_strategy(price)
+            company_name = get_company_name(ticker)
 
-            results.append({
-                "Ticker": ticker,
-                "Price": round(price, 2),
-                "Probability": round(prob * 100, 2),
-                "Take Profit": strategy["Take Profit"],
-                "Stop Loss": strategy["Stop Loss"]
-            })
+            with cols[i % 3]:
+                st.markdown("### 📊 " + company_name)
+                st.caption(ticker)
 
-        except:
-            continue
+                # Metrics
+                st.metric("Price", f"${price:.2f}")
+                st.metric("Chance ↑", f"{prob:.2%}")
 
-        progress.progress((i + 1) / len(stocks))
+                # Strategy
+                st.write("🎯 TP:", strategy["Take Profit"])
+                st.write("🛑 SL:", strategy["Stop Loss"])
+                st.write("⏳ Hold:", str(strategy["Max Hold"]) + " days")
 
-    # Convert to DataFrame
-    results_df = pd.DataFrame(results)
+                # Chart
+                st.line_chart(df["Close"])
 
-    # Sort by best probability
-    results_df = results_df.sort_values(by="Probability", ascending=False)
+                st.divider()
 
-    # Show Top 5
-    st.subheader("🏆 Top 5 Stocks Right Now")
-    st.dataframe(results_df.head(5), use_container_width=True)
-
-    # Show full table
-    st.subheader("📊 Full Scan Results")
-    st.dataframe(results_df, use_container_width=True)
-# -----------------------------
-# Strategy
-# -----------------------------
-def get_strategy(price):
-    return {
-        "Take Profit (+5%)": round(price * 1.05, 2),
-        "Stop Loss (-2%)": round(price * 0.98, 2),
-        "Max Hold Days": 5
-    }
-
-# -----------------------------
-# UI Input
-# -----------------------------
-ticker = st.text_input("Enter Stock Ticker", "AAPL")
-
-# -----------------------------
-# Run Analysis
-# -----------------------------
-if st.button("Analyze"):
-
-    with st.spinner("Analyzing stock..."):
-        df = get_stock_data(ticker)
-
-        if df is None:
-            st.error("❌ Invalid ticker or no data found.")
-        else:
-            model = train_model(df)
-            prob = predict(model, df)
-            price = df['Close'].iloc[-1]
-            strategy = get_strategy(price)
-
-            st.success(f"✅ Analysis for {ticker.upper()}")
-
-            # Display results
-            st.metric("💰 Current Price", f"${price:.2f}")
-            st.metric("📊 Chance of Going Up", f"{prob:.2%}")
-
-            st.subheader("📌 Trading Strategy")
-            st.write(f"🎯 Take Profit: ${strategy['Take Profit (+5%)']}")
-            st.write(f"🛑 Stop Loss: ${strategy['Stop Loss (-2%)']}")
-            st.write(f"⏳ Max Hold: {strategy['Max Hold Days']} days")
-
-            # Optional chart
-            st.subheader("📉 Price Chart")
-            st.line_chart(df['Close'])
+        except Exception as e:
+            st.write(f"{ticker} error")
