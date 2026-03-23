@@ -268,7 +268,7 @@ elif page == "🔍 Stock Selector":
     if st.button("💾 Save Selection"):
         st.session_state.selected_stocks = selected
         st.success("Saved!")        "Volume": volume
-    })
+    }
 
     # Indicators
     df_clean["rsi"] = RSIIndicator(close=df_clean["Close"]).rsi()
