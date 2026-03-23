@@ -8,12 +8,25 @@ from sklearn.ensemble import RandomForestClassifier
 st.set_page_config(page_title="AI Stock Scanner", layout="wide")
 
 st.title("🚀 AI Stock Scanner")
-st.subheader("Short-Term Probability + Strategy Insights")
+st.subheader("Simple AI Predictions (Short-Term)")
 
 stocks = [
     "AAPL", "MSFT", "TSLA", "NVDA", "AMZN",
     "META", "GOOGL", "AMD", "NFLX", "INTC"
 ]
+
+# -----------------------------
+# Color Function
+# -----------------------------
+def get_color(prob):
+    if prob > 0.7:
+        return "green"
+    elif prob > 0.55:
+        return "lightgreen"
+    elif prob > 0.45:
+        return "orange"
+    else:
+        return "red"
 
 # -----------------------------
 # Company Name
@@ -47,7 +60,6 @@ def get_stock_data(ticker):
     macd = MACD(close=df_clean['Close'])
     df_clean['macd'] = macd.macd()
 
-    # MULTI-TIME TARGETS
     df_clean['target_1d'] = (df_clean['Close'].shift(-1) > df_clean['Close']).astype(int)
     df_clean['target_3d'] = (df_clean['Close'].shift(-3) > df_clean['Close']).astype(int)
     df_clean['target_5d'] = (df_clean['Close'].shift(-5) > df_clean['Close']).astype(int)
@@ -55,7 +67,7 @@ def get_stock_data(ticker):
     return df_clean.dropna()
 
 # -----------------------------
-# Train Models
+# Train
 # -----------------------------
 def train_models(df):
     X = df[['Close', 'Volume', 'rsi', 'macd']]
@@ -81,19 +93,6 @@ def predict(models, df):
     }
 
 # -----------------------------
-# Strategy Logic
-# -----------------------------
-def get_strategy(price, prob_5d):
-    if prob_5d > 0.7:
-        return "🔥 Strong Buy"
-    elif prob_5d > 0.55:
-        return "👍 Moderate Buy"
-    elif prob_5d > 0.45:
-        return "⚠️ Risky"
-    else:
-        return "❌ Avoid"
-
-# -----------------------------
 # UI
 # -----------------------------
 if st.button("🔍 Scan Market"):
@@ -112,34 +111,42 @@ if st.button("🔍 Scan Market"):
             price = df['Close'].iloc[-1]
             company = get_company_name(ticker)
 
-            sentiment = get_strategy(price, probs["5 Day"])
-
             with cols[i % 3]:
                 st.markdown(f"### 📊 {company}")
                 st.caption(ticker)
 
                 st.metric("💰 Price", f"${price:.2f}")
 
-                # SHOW ALL PROBABILITIES (even bad ones)
-                st.write(f"📅 1D: {probs['1 Day']:.2%}")
-                st.write(f"📅 3D: {probs['3 Day']:.2%}")
-                st.write(f"📅 5D: {probs['5 Day']:.2%}")
+                # COLOR-CODED PROBABILITIES
+                for label, prob in probs.items():
+                    color = get_color(prob)
+                    st.markdown(
+                        f"<span style='color:{color}; font-size:18px;'>📅 {label}: {prob:.2%}</span>",
+                        unsafe_allow_html=True
+                    )
 
-                st.write(f"🧠 Signal: {sentiment}")
+                # SIMPLE SIGNAL
+                avg_prob = sum(probs.values()) / 3
+                if avg_prob > 0.65:
+                    signal = "🟢 Good Chance to Go Up"
+                elif avg_prob > 0.5:
+                    signal = "🟡 Could Go Up"
+                else:
+                    signal = "🔴 Low Chance"
+
+                st.write(f"🧠 {signal}")
 
                 # Chart
                 st.line_chart(df["Close"])
 
-                # ℹ️ INFO DROPDOWN
-                with st.expander("ℹ️ More Info"):
-                    st.write("RSI:", round(df['rsi'].iloc[-1], 2))
-                    st.write("MACD:", round(df['macd'].iloc[-1], 2))
-                    st.write("Volume:", int(df['Volume'].iloc[-1]))
-
-                    st.write("📘 Explanation:")
-                    st.write("- RSI shows momentum")
-                    st.write("- MACD shows trend direction")
-                    st.write("- Probabilities are AI predictions")
+                # SIMPLE INFO (NO TECH JARGON)
+                with st.expander("ℹ️ What this means"):
+                    st.write("This AI looks at recent price trends and activity to guess if a stock might go up.")
+                    st.write("📅 1 Day = Tomorrow")
+                    st.write("📅 3 Day = Short-term trend")
+                    st.write("📅 5 Day = About a week")
+                    st.write("🟢 Green = Higher chance of going up")
+                    st.write("🔴 Red = Lower chance of going up")
 
                 st.divider()
 
