@@ -251,7 +251,7 @@ elif page == "🏆 Best Opportunities":
 # -----------------------------
 # STOCK SELECTOR
 # -----------------------------
-elif page == "🔍 Stock Selector":
+eelif page == "🔍 Stock Selector":
 
     st.title("🔍 Pick Your Stocks")
 
@@ -267,8 +267,7 @@ elif page == "🔍 Stock Selector":
 
     if st.button("💾 Save Selection"):
         st.session_state.selected_stocks = selected
-        st.success("Saved!")        "Volume": volume
-    }
+        st.success("Saved!")
 
     # Indicators
     df_clean["rsi"] = RSIIndicator(close=df_clean["Close"]).rsi()
