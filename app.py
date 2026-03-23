@@ -140,13 +140,50 @@ if st.button("🔍 Scan Market"):
                 st.line_chart(df["Close"])
 
                 # SIMPLE INFO (NO TECH JARGON)
-                with st.expander("ℹ️ What this means"):
-                    st.write("This AI looks at recent price trends and activity to guess if a stock might go up.")
-                    st.write("📅 1 Day = Tomorrow")
-                    st.write("📅 3 Day = Short-term trend")
-                    st.write("📅 5 Day = About a week")
-                    st.write("🟢 Green = Higher chance of going up")
-                    st.write("🔴 Red = Lower chance of going up")
+                with st.expander("ℹ️ What this means (simple)"):
+    rsi = df['rsi'].iloc[-1]
+    macd = df['macd'].iloc[-1]
+
+    # SIMPLE RSI EXPLANATION
+    if rsi > 70:
+        rsi_text = "The stock went up a lot recently — it might slow down or drop soon."
+    elif rsi < 30:
+        rsi_text = "The stock dropped a lot recently — it might bounce back up."
+    else:
+        rsi_text = "The stock is moving normally — no extreme behavior."
+
+    # SIMPLE MACD EXPLANATION
+    if macd > 0:
+        macd_text = "The trend is going UP right now."
+    else:
+        macd_text = "The trend is going DOWN right now."
+
+    st.write("🧠 **How the AI is thinking:**")
+    st.write("This AI looks at price movement, trends, and activity to estimate if a stock may go up.")
+
+    st.write("---")
+
+    st.write(f"📊 **Momentum (RSI: {rsi:.2f})**")
+    st.write(rsi_text)
+
+    st.write("---")
+
+    st.write(f"📈 **Trend Direction (MACD: {macd:.2f})**")
+    st.write(macd_text)
+
+    st.write("---")
+
+    st.write("📅 **Time Predictions:**")
+    st.write("• 1 Day → Tomorrow")
+    st.write("• 3 Day → Short-term trend")
+    st.write("• 5 Day → About a week")
+
+    st.write("---")
+
+    st.write("🎯 **Color Guide:**")
+    st.write("🟢 Green = Higher chance of going up")
+    st.write("🟡 Yellow = Could go either way")
+    st.write("🔴 Red = Lower chance of going up")
 
                 st.divider()
 
