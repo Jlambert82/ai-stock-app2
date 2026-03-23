@@ -42,6 +42,20 @@ def get_color(prob):
     else:
         return "red"
 
+def explain_rsi(rsi):
+    if rsi > 70:
+        return "🔴 Overbought (might drop soon)"
+    elif rsi < 30:
+        return "🟢 Oversold (might go up)"
+    else:
+        return "🟡 Neutral"
+
+def explain_macd(macd):
+    if macd > 0:
+        return "🟢 Uptrend momentum"
+    else:
+        return "🔴 Downtrend momentum"
+
 def get_company_name(ticker):
     try:
         return yf.Ticker(ticker).info.get("longName", ticker)
@@ -49,7 +63,7 @@ def get_company_name(ticker):
         return ticker
 
 # -----------------------------
-# DATA FUNCTION
+# DATA
 # -----------------------------
 def get_stock_data(ticker):
     df = yf.download(ticker, period="6mo", interval="1d")
@@ -65,6 +79,195 @@ def get_stock_data(ticker):
     df_clean = pd.DataFrame({
         "Close": close,
         "Volume": volume
+    })
+
+    df_clean["rsi"] = RSIIndicator(close=df_clean["Close"]).rsi()
+    macd = MACD(close=df_clean["Close"])
+    df_clean["macd"] = macd.macd()
+
+    df_clean["target_1d"] = (df_clean["Close"].shift(-1) > df_clean["Close"]).astype(int)
+    df_clean["target_3d"] = (df_clean["Close"].shift(-3) > df_clean["Close"]).astype(int)
+    df_clean["target_5d"] = (df_clean["Close"].shift(-5) > df_clean["Close"]).astype(int)
+
+    return df_clean.dropna()
+
+# -----------------------------
+# MODELS
+# -----------------------------
+def train_models(df):
+    X = df[["Close", "Volume", "rsi", "macd"]]
+
+    models = {}
+    regressors = {}
+
+    for days, label in zip([1, 3, 5], ["target_1d", "target_3d", "target_5d"]):
+        clf = RandomForestClassifier(n_estimators=100)
+        clf.fit(X, df[label])
+        models[label] = clf
+
+        future_price = df["Close"].shift(-days)
+        pct_change = (future_price - df["Close"]) / df["Close"]
+
+        reg = RandomForestRegressor(n_estimators=100)
+        reg.fit(X, pct_change.fillna(0))
+        regressors[label] = reg
+
+    return models, regressors
+
+# -----------------------------
+# PREDICT
+# -----------------------------
+def predict(models, regressors, df):
+    latest = df[["Close", "Volume", "rsi", "macd"]].iloc[-1:]
+    current_price = df["Close"].iloc[-1]
+
+    results = {}
+
+    for label, days in zip(["target_1d","target_3d","target_5d"], [1,3,5]):
+        prob = models[label].predict_proba(latest)[0][1]
+        pct = regressors[label].predict(latest)[0]
+        expected_price = current_price * (1 + pct)
+
+        results[days] = {
+            "prob": prob,
+            "pct": pct,
+            "price": expected_price
+        }
+
+    return results
+
+# -----------------------------
+# SCORE
+# -----------------------------
+def calculate_score(preds):
+    return sum([d["prob"] * d["pct"] for d in preds.values()])
+
+# -----------------------------
+# SCANNER PAGE (DETAILED)
+# -----------------------------
+if page == "📊 Scanner":
+
+    st.title("🚀 AI Stock Scanner")
+
+    if st.button("🔍 Scan Selected Stocks"):
+
+        cols = st.columns(3)
+
+        for i, ticker in enumerate(st.session_state.selected_stocks):
+
+            try:
+                df = get_stock_data(ticker)
+                if df is None:
+                    continue
+
+                models, regressors = train_models(df)
+                preds = predict(models, regressors, df)
+
+                price = df["Close"].iloc[-1]
+                rsi = df["rsi"].iloc[-1]
+                macd = df["macd"].iloc[-1]
+                company = get_company_name(ticker)
+
+                with cols[i % 3]:
+                    st.markdown(f"### 📊 {company}")
+                    st.caption(ticker)
+
+                    st.metric("💰 Price", f"${price:.2f}")
+
+                    # Indicators with explanation
+                    st.write(f"RSI: {rsi:.2f} → {explain_rsi(rsi)}")
+                    st.write(f"MACD: {macd:.4f} → {explain_macd(macd)}")
+
+                    st.markdown("### 📈 Predictions")
+
+                    for days, data in preds.items():
+                        prob = data["prob"]
+                        pct = data["pct"]
+                        target = data["price"]
+
+                        color = get_color(prob)
+
+                        st.markdown(
+                            f"<span style='color:{color}; font-size:18px;'>"
+                            f"{days} Day: {prob:.2%} chance | {pct:+.2%} → ${target:.2f}"
+                            f"</span>",
+                            unsafe_allow_html=True
+                        )
+
+                    # Alerts
+                    avg_prob = sum([d["prob"] for d in preds.values()]) / 3
+                    avg_pct = sum([d["pct"] for d in preds.values()]) / 3
+
+                    if avg_prob > 0.7 and avg_pct > 0:
+                        st.success("🚨 BUY ALERT (Strong upward signal)")
+                    elif avg_pct < -0.03:
+                        st.error("⚠️ SELL ALERT (Possible drop)")
+                    else:
+                        st.info("ℹ️ No strong signal")
+
+                    st.line_chart(df["Close"])
+                    st.divider()
+
+            except Exception as e:
+                st.error(f"{ticker} error: {e}")
+
+# -----------------------------
+# BEST OPPORTUNITIES
+# -----------------------------
+elif page == "🏆 Best Opportunities":
+
+    st.title("🏆 Best Stock Opportunities")
+
+    results = []
+
+    for ticker in st.session_state.selected_stocks:
+        try:
+            df = get_stock_data(ticker)
+            if df is None:
+                continue
+
+            models, regressors = train_models(df)
+            preds = predict(models, regressors, df)
+
+            score = calculate_score(preds)
+            price = df["Close"].iloc[-1]
+
+            results.append((ticker, score, preds, price))
+
+        except:
+            continue
+
+    results = sorted(results, key=lambda x: x[1], reverse=True)
+
+    for ticker, score, preds, price in results:
+        st.markdown(f"### {ticker} — Score: {score:.4f}")
+        st.write(f"💰 ${price:.2f}")
+
+        for d, data in preds.items():
+            st.write(f"{d}D → {data['pct']:+.2%} | {data['prob']:.2%}")
+
+        st.divider()
+
+# -----------------------------
+# STOCK SELECTOR
+# -----------------------------
+elif page == "🔍 Stock Selector":
+
+    st.title("🔍 Pick Your Stocks")
+
+    search = st.text_input("Search ticker")
+
+    filtered = [s for s in all_stocks if search.upper() in s]
+
+    selected = []
+
+    for stock in filtered:
+        if st.checkbox(stock, value=(stock in st.session_state.selected_stocks)):
+            selected.append(stock)
+
+    if st.button("💾 Save Selection"):
+        st.session_state.selected_stocks = selected
+        st.success("Saved!")        "Volume": volume
     })
 
     # Indicators
