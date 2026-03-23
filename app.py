@@ -251,7 +251,7 @@ elif page == "🏆 Best Opportunities":
 # -----------------------------
 # STOCK SELECTOR
 # -----------------------------
-eelif page == "🔍 Stock Selector":
+elif page == "🔍 Stock Selector":
 
     st.title("🔍 Pick Your Stocks")
 
